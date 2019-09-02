@@ -8,4 +8,6 @@
 /src/ip/*/*
 /src/ip/*/*/
 !/src/ip/*/*.xci
+!/src/ip/*/*.xdc
+!/src/ip/*/*.xml
 
