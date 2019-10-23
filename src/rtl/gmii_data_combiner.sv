@@ -35,18 +35,23 @@ module gmii_data_combiner(
 
 	localparam MINIMUM_INTERFRAME_GAP = 12;
 
-	always @(posedge clk)begin 
-		gmii_input_interfaces_d <= gmii_input_interfaces;
-		gmii_input_interfaces_dd <= gmii_input_interfaces_d;
-		gmii_input_interfaces_ddd <= gmii_input_interfaces_dd;
-	end
-
    genvar i;
+
+   generate
+	for (i = 0; i < PORT_NUMBER-1; i++) begin
+		always @(posedge gmii_clocks[i])begin 
+			gmii_input_interfaces_d[i] <= gmii_input_interfaces[i];
+			gmii_input_interfaces_dd[i] <= gmii_input_interfaces_d[i];
+			gmii_input_interfaces_ddd[i] <= gmii_input_interfaces_dd[i];
+		end
+	end
+   endgenerate	
+
 	reg [PORT_NUMBER-1-1:0] end_of_packet = '0;
 
 
 	typedef struct packed {
-		reg [10:0] data;
+		gmii_interface data;
 		reg dv;
 		reg ready;
 		reg last;
@@ -86,7 +91,7 @@ module gmii_data_combiner(
 
 
    reg [7:0] idle_gap_counter = 0;
-   enum logic [1:0] {IDLE = 2'b00,
+   (*keep = "true"*)enum logic [1:0] {IDLE = 2'b00,
                      READ_0_FIFO = 2'b01,
                      READ_1_FIFO = 2'b10,
                      READ_2_FIFO = 2'b11} switch_state;

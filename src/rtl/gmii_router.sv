@@ -33,6 +33,11 @@ module gmii_router #(parameter THIS_PORT_ROUTING = 0)(
 
 	(*keep = "true"*)gmii_routed_interface [DELAY_DATA_VALUE-1:0] gmii_pipe;
 
+	switch_table src_MAC_table_sync;
+	always_ff @(posedge clk)
+		src_MAC_table_sync <= src_MAC_table;
+
+
 	always_ff @(posedge clk) begin
 		gmii_pipe[0].gmii_flow <= gmii_rxd_in;
       for (int i=1; i < DELAY_DATA_VALUE; i++)
@@ -72,14 +77,14 @@ module gmii_router #(parameter THIS_PORT_ROUTING = 0)(
 				else begin 
 					if (!gmii_pipe[DELAY_DATA_VALUE-1-1].gmii_flow.dv && gmii_pipe[DELAY_DATA_VALUE-2-1].gmii_flow.dv)begin//start of packet in pipe
 						if(detected_preamble[2*BYTE-1:BYTE] == 8'hD5)begin//start of frame byte
-							mac_compare[i][j] <= (&(~(detected_MAC_dest_pr_sh ^ src_MAC_table.main_switch_table[i].mac_number_per_port[j]))) || (&detected_MAC_dest_pr_sh);//1 if mac in the table or it is broadcast
+							mac_compare[i][j] <= (&(~(detected_MAC_dest_pr_sh ^ src_MAC_table_sync.main_switch_table[i].mac_number_per_port[j]))) || (&detected_MAC_dest_pr_sh);//1 if mac in the table or it is broadcast
 							if(&detected_MAC_dest_pr_sh) 
 								broadcast_detector <= 1'b1;
 							else
 								broadcast_detector <= 1'b0;
 						end
 						else begin 
-							mac_compare[i][j] <= (&(~(detected_MAC_dest ^ src_MAC_table.main_switch_table[i].mac_number_per_port[j]))) || (&detected_MAC_dest);//1 if mac in the table or it is broadcast
+							mac_compare[i][j] <= (&(~(detected_MAC_dest ^ src_MAC_table_sync.main_switch_table[i].mac_number_per_port[j]))) || (&detected_MAC_dest);//1 if mac in the table or it is broadcast
 							if(&detected_MAC_dest) 
 								broadcast_detector <= 1'b1;
 							else

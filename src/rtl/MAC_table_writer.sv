@@ -26,12 +26,15 @@ module MAC_table_writer(
     input rst,
     input [PORT_NUMBER-1:0] port_clocks,
     input mac_info_interface [PORT_NUMBER-1:0] mac_info,
-    output switch_table mac_table
+    output switch_table mac_table_out
     );
 
 	reg [MAC_TABLE_SIZE-1:0] mac_compare [PORT_NUMBER-1:0];
     mac_info_interface [PORT_NUMBER-1:0] mac_info_synced;
 
+    switch_table mac_table;
+    always_ff @(posedge clk)
+    	mac_table_out <= mac_table;
 
    genvar gen_var;
    generate

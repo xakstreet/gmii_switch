@@ -60,6 +60,8 @@ module gmii_switch_2x2(
     input clk_port2,
     input clk_port3,
 
+  (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 rst RST" *)
+  (* X_INTERFACE_PARAMETER = "POLARITY ACTIVE_HIGH" *)
     input rst,
   (* X_INTERFACE_INFO = "xilinx.com:interface:gmii:1.0 gmii_port_0 RXD" *)
     input [7:0] gmii_rxd_0,
@@ -148,7 +150,7 @@ MAC_table_writer MAC_table_writer_inst(
     .rst(rst),
     .port_clocks(gmii_clocks),
     .mac_info(mac_info),
-    .mac_table(top_switch_table)
+    .mac_table_out(top_switch_table)
     );
 
 (*keep = "true"*)gmii_interface [PORT_NUMBER-1:0] gmii_rxd_all_after_router_port [PORT_NUMBER-1:0];

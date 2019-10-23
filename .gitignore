@@ -3,6 +3,8 @@
 *.str
 *.btree
 *.tmp
+*.xml
+/xgui
 /.Xil
 /xproject
 /src/ip/*/*

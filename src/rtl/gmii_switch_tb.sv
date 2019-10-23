@@ -483,12 +483,25 @@ end
     end
   end
 
+  reg table_clk; 
+  initial
+  begin
+    table_clk <= 1'b0;
+    forever
+    begin
+      table_clk <= 1'b0;
+      #40000;
+      table_clk <= 1'b1;
+      #40000;
+    end
+  end
+
   //----------------------------------------------------------------------------
   // Wire up Device Under Test
   //----------------------------------------------------------------------------
   gmii_switch_2x2 dut
      (
-      .arp_table_clk(independent_clock),
+      .arp_table_clk(table_clk),
       .clk_port0(independent_clock),
       .clk_port1(independent_clock),
       .clk_port2(independent_clock),
