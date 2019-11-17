@@ -48,13 +48,13 @@ package gmii_router_definitions;
 	} switch_table;
 	///////////////////
 
-
-
-
 	typedef struct packed {
 		mac_val mac_number_per_port;
 		reg mac_valid;
 	} mac_info_interface;
+
+
+
 
 
 endpackage
