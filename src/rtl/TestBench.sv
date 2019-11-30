@@ -20,17 +20,34 @@
 //////////////////////////////////////////////////////////////////////////////////
 import gmii_router_definitions::*;
 
+//clock generation class
 class clkParameters;
    int period = 8;
    rand int clk_pahse_delay [3:0];
    constraint phase_values { foreach (clk_pahse_delay[i]) {
-                              clk_pahse_delay[i]<period && clk_pahse_delay[i]>=0;
-                              }
-                                }
-
+                              clk_pahse_delay[i]<period && clk_pahse_delay[i]>=0;}}
 endclass : clkParameters
 
+//frame generation class and package
+package frameTypePKG;
+  typedef enum {BROADCAST_P=0, UNICAST_P=1} frameType;
+endpackage
+import frameTypePKG::*;
+class frameParameters;
+   typedef enum {BROADCAST_P=0, UNICAST_P=1} frameType;
+   rand logic shrinked_preamble;
+   rand int frame_length;
+   rand frameType frame_type;
+   constraint frame_length_constr {frame_length inside {[64:1500]};}
+   constraint frameTypeConstr {
+    frame_type dist {
+      BROADCAST_P := 2,
+      UNICAST_P := 8
+    };
+   }
+endclass : frameParameters
 
+//gmii interface
 interface gmii_interface_io ();
   logic [7:0] rxd;
   logic rx_dv;
@@ -42,22 +59,76 @@ interface gmii_interface_io ();
   modport slave  (output rxd, output rx_dv, output rx_err, input txd, input tx_en, input tx_err);
 endinterface: gmii_interface_io
 
-interface gmii_interface_io_inner (gmii_interface_io.slave port2, gmii_interface_io.slave port3);
-  logic [47:0] port2_device_MAC = 48'h22AABBCCDDAA;
-  logic [47:0] port3_device_MAC = 48'h33AABBCCDDAA;
+// //switch inner interfaces(generate acks on rxd lanes)
+// interface gmii_interface_io_inner (input clk2, input clk3, gmii_interface_io.slave port2, gmii_interface_io.slave port3);
+//   logic [47:0] port2_device_MAC = 48'h22AABBCCDDAA;
+//   logic [47:0] port3_device_MAC = 48'h33AABBCCDDAA;
 
-  modport  sendData(import send_frame);
-  task send_frame(int data_size);
-  endtask : send_frame
-endinterface: gmii_interface_io_inner
+//   // modport  sendData(import send_frame);
+//   // task send_frame(int data_size);
+    
+//   // endtask : send_frame
+// endinterface: gmii_interface_io_inner
 
-interface gmii_interface_io_outer (gmii_interface_io.master port0, gmii_interface_io.master port1);
-  logic [47:0] port0_device_MAC = 48'h00AABBCCDDAA;
-  logic [47:0] port1_device_MAC = 48'h11AABBCCDDAA;
+
+
+//switch inner interfaces(generate data on txd lanes)
+interface gmii_interface_io_outer (input clk, gmii_interface_io.master port);
+  frameParameters fT = new;
+  modport  sendData(import send_rx_frame);
+  task send_rx_frame(input logic [47:0] MAC_SRC_VAL, input logic [47:0] MAC_DST_VAL);
+    $display("Shrinked = %d, Size = %d", fT.shrinked_preamble, fT.frame_length);
+    port.rx_dv = 0;
+    port.rx_err = 0;
+    port.rxd = 8'h00;
+    for(int i=0;i<12;i++)begin : send_interframe
+      @(posedge clk);
+      port.rx_dv = 0;
+      port.rx_err = 0;
+      port.rxd = 8'h55;
+    end
+    for(int i=0;i<(6+fT.shrinked_preamble);i++)begin : send_preamble
+      @(posedge clk);
+      port.rx_dv = 1;
+      port.rx_err = 0;
+      port.rxd = 8'h55;
+    end
+    @(posedge clk);//end of preamble
+    port.rx_dv = 1;
+    port.rx_err = 0;
+    port.rxd = 8'hD5;
+    for(int i=0;i<6;i++)begin : send_MAC_dst
+      @(posedge clk);
+      port.rx_dv = 1;
+      port.rx_err = 0;
+      if (fT.frame_type==BROADCAST_P) begin
+        port.rxd = 8'hFF;
+      end
+      else begin 
+        port.rxd = MAC_DST_VAL[i*8+:8];
+      end
+    end
+    for(int i=0;i<6;i++)begin : send_MAC_src
+      @(posedge clk);
+      port.rx_dv = 1;
+      port.rx_err = 0;
+      port.rxd = MAC_SRC_VAL[i*8+:8];
+    end
+    for(int i=0;i<fT.frame_length;i++)begin : send_payload
+      @(posedge clk);
+      port.rx_dv = 1;
+      port.rx_err = 0;
+      port.rxd = $urandom();
+    end
+    @(posedge clk);//end of packet
+    port.rx_dv = 0;
+    port.rx_err = 0;
+    port.rxd = 8'h55; 
+  endtask : send_rx_frame
   
-  modport  sendData(import send_frame);
-  task send_frame(int data_size);
-  endtask : send_frame
+
+
+
 endinterface: gmii_interface_io_outer
 
 
@@ -116,10 +187,23 @@ gmii_interface_io gmii_interface_io_port0();
 gmii_interface_io gmii_interface_io_port1(); 
 gmii_interface_io gmii_interface_io_port2(); 
 gmii_interface_io gmii_interface_io_port3(); 
-gmii_interface_io_inner gmii_inner_flow(gmii_interface_io_port2, gmii_interface_io_port3);
-gmii_interface_io_outer gmii_outer_flow(gmii_interface_io_port0, gmii_interface_io_port1);
+gmii_interface_io_outer gmii_flow_0(clk[0], gmii_interface_io_port0);
+gmii_interface_io_outer gmii_flow_1(clk[1], gmii_interface_io_port1);
 
     
+initial begin : sender_0
+  @clk_start;//wait phase initialize
+  gmii_flow_0.fT.randomize;
+  gmii_flow_0.sendData.send_rx_frame(20,40);
+end
+initial begin : sender_1
+  @clk_start;//wait phase initialize
+  gmii_flow_1.fT.randomize;
+  gmii_flow_1.fT.randomize;
+  gmii_flow_1.sendData.send_rx_frame(20,40);
+end
+
+
   gmii_switch_2x2 dut
        (
         .arp_table_clk(sys_clk),
@@ -129,33 +213,34 @@ gmii_interface_io_outer gmii_outer_flow(gmii_interface_io_port0, gmii_interface_
         .clk_port3(clk[3]),
         .rst(1'b0),
 
-        .gmii_rxd_0   (gmii_outer_flow.port0.rxd),
-        .gmii_rx_dv_0 (gmii_outer_flow.port0.rx_dv),
-        .gmii_rx_err_0(gmii_outer_flow.port0.rx_err),
-        .gmii_txd_0   (gmii_outer_flow.port0.txd),
-        .gmii_tx_dv_0 (gmii_outer_flow.port0.tx_en),
-        .gmii_tx_err_0(gmii_outer_flow.port0.tx_err),
+        .gmii_rxd_0   (),
+        .gmii_rx_dv_0 (),
+        .gmii_rx_err_0(),
+        .gmii_txd_0   (),
+        .gmii_tx_dv_0 (),
+        .gmii_tx_err_0(),
 
-        .gmii_rxd_1   (gmii_outer_flow.port1.rxd),
-        .gmii_rx_dv_1 (gmii_outer_flow.port1.rx_dv),
-        .gmii_rx_err_1(gmii_outer_flow.port1.rx_err),
-        .gmii_txd_1   (gmii_outer_flow.port1.txd),
-        .gmii_tx_dv_1 (gmii_outer_flow.port1.tx_en),
-        .gmii_tx_err_1(gmii_outer_flow.port1.rx_err),
+        .gmii_rxd_1   (),
+        .gmii_rx_dv_1 (),
+        .gmii_rx_err_1(),
+        .gmii_txd_1   (),
+        .gmii_tx_dv_1 (),
+        .gmii_tx_err_1(),
 
-        .gmii_rxd_2   (gmii_inner_flow.port2.rxd),
-        .gmii_rx_dv_2 (gmii_inner_flow.port2.rx_dv),
-        .gmii_rx_err_2(gmii_inner_flow.port2.rx_err),
-        .gmii_txd_2   (gmii_inner_flow.port2.txd),
-        .gmii_tx_dv_2 (gmii_inner_flow.port2.tx_en),
-        .gmii_tx_err_2(gmii_inner_flow.port2.rx_err),
+        .gmii_rxd_2   (),
+        .gmii_rx_dv_2 (),
+        .gmii_rx_err_2(),
+        .gmii_txd_2   (),
+        .gmii_tx_dv_2 (),
+        .gmii_tx_err_2(),
 
-        .gmii_rxd_3   (gmii_inner_flow.port3.rxd),
-        .gmii_rx_dv_3 (gmii_inner_flow.port3.rx_dv),
-        .gmii_rx_err_3(gmii_inner_flow.port3.rx_err),
-        .gmii_txd_3   (gmii_inner_flow.port3.txd),
-        .gmii_tx_dv_3 (gmii_inner_flow.port3.tx_en),
-        .gmii_tx_err_3(gmii_inner_flow.port3.rx_err)
+        .gmii_rxd_3   (),
+        .gmii_rx_dv_3 (),
+        .gmii_rx_err_3(),
+        .gmii_txd_3   (),
+        .gmii_tx_dv_3 (),
+        .gmii_tx_err_3()
         );    
+        
     
 endmodule : TestBench
